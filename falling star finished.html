@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Star Falling Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #game-container {
+      width: 100%;
+      height: 100vh;
+      background-color: #2c3e50;
+      position: relative;
+      overflow: hidden;
+      transition: background-color 0.3s ease;
+    }
+    #player {
+      width: 30px;
+      height: 30px;
+      position: absolute;
+      top: 50%;  /* Changed from 50px to 50% to center vertically */
+      left: 50%;
+      transform: translate(-50%, -50%);  /* Updated to center both horizontally and vertically */
+      z-index: 10;
+    }
+    .obstacle {
+      position: absolute;
+      z-index: 5;
+    }
+    .moving-obstacle {
+      position: absolute;
+      background-color: #e74c3c;
+      z-index: 5;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 24px;
+      color: white;
+      z-index: 20;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    #level {
+      position: absolute;
+      top: 50px;
+      right: 10px;
+      font-size: 20px;
+      color: #f1c40f;
+      z-index: 20;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0,0,0,0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      display: none;
+      z-index: 30;
+      min-width: 300px;
+    }
+    #restart-btn {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 10px 2px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .cloud {
+      position: absolute;
+      background-color: #34495e;
+      border-radius: 50px;
+      z-index: 1;
+    }
+    .star {
+      position: absolute;
+      background-color: white;
+      border-radius: 50%;
+      z-index: 2;
+    }
+    .stardust {
+      position: absolute;
+      background-color: #f1c40f;
+      border-radius: 50%;
+      z-index: 8;
+      opacity: 0.8;
+    }
+    .firework {
+      position: absolute;
+      border-radius: 50%;
+      z-index: 3;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <svg id="player" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <!-- Star shape instead of asteroid -->
+      <path d="M50,10 L61,35 L90,40 L70,60 L75,90 L50,75 L25,90 L30,60 L10,40 L39,35 Z" fill="#f1c40f" stroke="#f39c12" stroke-width="2" />
+      <circle cx="50" cy="50" r="5" fill="#ffffff" />
+    </svg>
+    <div id="score">Score: 0</div>
+    <div id="level">Level: 1</div>
+    <div id="game-over">
+      <h2>Game Over!</h2>
+      <p id="final-score">Your score: 0</p>
+      <p id="final-level">Level reached: 1</p>
+      <button id="restart-btn">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    // Game variables
+    let player = document.getElementById('player');
+    let gameContainer = document.getElementById('game-container');
+    let scoreDisplay = document.getElementById('score');
+    let levelDisplay = document.getElementById('level');
+    let gameOverScreen = document.getElementById('game-over');
+    let finalScoreDisplay = document.getElementById('final-score');
+    let finalLevelDisplay = document.getElementById('final-level');
+    let restartBtn = document.getElementById('restart-btn');
+    
+    let playerX = window.innerWidth / 2;
+    let playerY = window.innerHeight / 2; // Added playerY for vertical position
+    let score = 0;
+    let level = 1;
+    let gameSpeed = 4; // Starting faster
+    let obstacleInterval = 1200; // More frequent obstacles
+    let lastObstacleTime = 0;
+    let gameRunning = true;
+    let obstacles = [];
+    let clouds = [];
+    let stars = [];
+    let movingObstacles = [];
+    let stardust = [];
+    let fireworks = [];
+    let isInvincible = false;
+    let playerSize = 30;
+    let lastStardustTime = 0;
+    
+    // Set initial player position
+    player.style.top = `${playerY}px`;
+    player.style.left = `${playerX}px`;
+    
+    // Create stars (background)
+    function createStars() {
+      for (let i = 0; i < 50; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        
+        const size = Math.random() * 2 + 1;
+        const left = Math.random() * window.innerWidth;
+        const top = Math.random() * window.innerHeight;
+        
+        star.style.width = `${size}px`;
+        star.style.height = `${size}px`;
+        star.style.left = `${left}px`;
+        star.style.top = `${top}px`;
+        star.style.opacity = Math.random() * 0.7 + 0.3;
+        
+        gameContainer.appendChild(star);
+        stars.push(star);
+      }
+    }
+    
+    // Create stardust particles
+    function createStardust(timestamp) {
+      if (!gameRunning) return;
+      if (!lastStardustTime || timestamp - lastStardustTime > 50) { // Create stardust every 50ms
+        // Create multiple particles of stardust
+        for (let i = 0; i < 3; i++) {
+          const dust = document.createElement('div');
+          dust.className = 'stardust';
+          
+          const size = Math.random() * 4 + 2;
+          const offsetX = Math.random() * 20 - 10;
+          const offsetY = Math.random() * 5;
+          
+          dust.style.width = `${size}px`;
+          dust.style.height = `${size}px`;
+          dust.style.left = `${playerX + offsetX}px`;
+          dust.style.top = `${playerY + playerSize/2 + offsetY}px`; // Updated to use playerY
+          
+          // Randomize stardust color (shades of gold and yellow)
+          const colors = ['#f1c40f', '#f39c12', '#ffeb3b', '#ffc107'];
+          dust.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          
+          gameContainer.appendChild(dust);
+          stardust.push({
+            element: dust,
+            opacity: 0.8,
+            size: size,
+            speedY: Math.random() * 2 - 3, // Slight upward drift
+            speedX: Math.random() * 2 - 1, // Slight horizontal drift
+          });
+        }
+        
+        lastStardustTime = timestamp;
+      }
+    }
+    
+    // Create fireworks for level up effect
+    function createFireworks() {
+      // Create multiple fireworks in random positions
+      for (let i = 0; i < 10; i++) {
+        // Random position for firework origin
+        const originX = Math.random() * window.innerWidth;
+        const originY = window.innerHeight * 0.7;
+        
+        // Create firework particles
+        setTimeout(() => {
+          if (!gameRunning) return;
+          createFireworkParticles(originX, originY);
+        }, i * 200); // Stagger firework launches
+      }
+    }
+    
+    // Create particles for each firework
+    function createFireworkParticles(x, y) {
+      // Random color for this firework
+      const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#1abc9c'];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      
+      // Create multiple particles spreading out from the origin
+      for (let i = 0; i < 30; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'firework';
+        
+        const size = Math.random() * 4 + 2;
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.left = `${x}px`;
+        particle.style.top = `${y}px`;
+        particle.style.backgroundColor = color;
+        
+        gameContainer.appendChild(particle);
+        
+        // Calculate random direction for the particle
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 5 + 3;
+        
+        fireworks.push({
+          element: particle,
+          x: x,
+          y: y,
+          speedX: Math.cos(angle) * speed,
+          speedY: Math.sin(angle) * speed,
+          opacity: 1,
+          gravity: 0.05
+        });
+      }
+    }
+    
+    // Player controls (left and right)
+    document.addEventListener('keydown', function(event) {
+      if (!gameRunning) return;
+      
+      const moveSpeed = 18 - Math.min(8, level); // Player moves slower as level increases
+      
+      if (event.key === 'ArrowLeft') {
+        playerX -= moveSpeed;
+      } else if (event.key === 'ArrowRight') {
+        playerX += moveSpeed;
+      }
+      
+      // Keep player within bounds
+      const playerWidth = playerSize;
+      if (playerX < playerWidth / 2) {
+        playerX = playerWidth / 2;
+      } else if (playerX > window.innerWidth - playerWidth / 2) {
+        playerX = window.innerWidth - playerWidth / 2;
+      }
+      
+      player.style.left = `${playerX}px`;
+    });
+    
+    // Mouse/touch controls
+    gameContainer.addEventListener('mousemove', function(event) {
+      if (!gameRunning) return;
+      
+      playerX = event.clientX;
+      
+      // Keep player within bounds
+      const playerWidth = playerSize;
+      if (playerX < playerWidth / 2) {
+        playerX = playerWidth / 2;
+      } else if (playerX > window.innerWidth - playerWidth / 2) {
+        playerX = window.innerWidth - playerWidth / 2;
+      }
+      
+      player.style.left = `${playerX}px`;
+    });
+    
+    gameContainer.addEventListener('touchmove', function(event) {
+      if (!gameRunning) return;
+      
+      event.preventDefault();
+      playerX = event.touches[0].clientX;
+      
+      // Keep player within bounds
+      const playerWidth = playerSize;
+      if (playerX < playerWidth / 2) {
+        playerX = playerWidth / 2;
+      } else if (playerX > window.innerWidth - playerWidth / 2) {
+        playerX = window.innerWidth - playerWidth / 2;
+      }
+      
+      player.style.left = `${playerX}px`;
+    });
+    
+    // Create standard obstacle
+    function createObstacle() {
+      if (!gameRunning) return;
+      
+      const obstacle = document.createElement('div');
+      obstacle.className = 'obstacle';
+      
+      // Randomize obstacle pattern based on level
+      let width, gap, left;
+      
+      if (Math.random() < 0.3 && level > 2) {
+        // Create multiple obstacles with small gaps
+        const segments = Math.floor(Math.random() * 3) + 2;
+        const segmentWidth = window.innerWidth / (segments * 2);
+        const positions = [];
+        
+        for (let i = 0; i < segments; i++) {
+          const segObstacle = document.createElement('div');
+          segObstacle.className = 'obstacle';
+          
+          const segLeft = i * (window.innerWidth / segments) + Math.random() * (window.innerWidth / segments - segmentWidth);
+          
+          segObstacle.style.width = `${segmentWidth}px`;
+          segObstacle.style.height = '15px';
+          segObstacle.style.left = `${segLeft}px`;
+          segObstacle.style.top = `${window.innerHeight}px`;
+          segObstacle.style.backgroundColor = getRandomColor();
+          
+          gameContainer.appendChild(segObstacle);
+          obstacles.push({
+            element: segObstacle,
+            left: segLeft,
+            right: segLeft + segmentWidth,
+            top: window.innerHeight,
+            bottom: window.innerHeight + 15,
+            counted: false
+          });
+          
+          positions.push({left: segLeft, right: segLeft + segmentWidth});
+        }
+        
+        return;
+      }
+      
+      if (level <= 3) {
+        // Easier patterns for early levels
+        width = Math.random() * (window.innerWidth / 3) + 50;
+        gap = 120 - (level * 10);
+        left = Math.random() * (window.innerWidth - width);
+      } else if (level <= 7) {
+        // Medium difficulty
+        width = Math.random() * (window.innerWidth / 2) + 100;
+        gap = 100 - (level * 5);
+        left = Math.random() * (window.innerWidth - width);
+      } else {
+        // Hard patterns
+        width = Math.random() * (window.innerWidth / 1.5) + 150;
+        gap = Math.max(40, 90 - (level * 5)); // Minimum gap of 40px
+        left = Math.random() * (window.innerWidth - width);
+      }
+      
+      obstacle.style.width = `${width}px`;
+      obstacle.style.height = '15px';
+      obstacle.style.left = `${left}px`;
+      obstacle.style.top = `${window.innerHeight}px`;
+      obstacle.style.backgroundColor = getRandomColor();
+      
+      gameContainer.appendChild(obstacle);
+      obstacles.push({
+        element: obstacle,
+        left: left,
+        right: left + width,
+        top: window.innerHeight,
+        bottom: window.innerHeight + 15,
+        counted: false
+      });
+    }
+    
+    // Create moving obstacle
+    function createMovingObstacle() {
+      if (!gameRunning || level < 3) return;
+      
+      const obstacle = document.createElement('div');
+      obstacle.className = 'moving-obstacle';
+      
+      const width = Math.random() * 80 + 40;
+      const height = 15;
+      const left = Math.random() * (window.innerWidth - width);
+      const direction = Math.random() > 0.5 ? 1 : -1;
+      const speed = Math.random() * 2 + 1 + (level * 0.2);
+      
+      obstacle.style.width = `${width}px`;
+      obstacle.style.height = `${height}px`;
+      obstacle.style.left = `${left}px`;
+      obstacle.style.top = `${window.innerHeight}px`;
+      
+      gameContainer.appendChild(obstacle);
+      movingObstacles.push({
+        element: obstacle,
+        left: left,
+        width: width,
+        top: window.innerHeight,
+        bottom: window.innerHeight + height,
+        direction: direction,
+        speed: speed,
+        counted: false
+      });
+    }
+    
+    // Create cloud (background element)
+    function createCloud() {
+      const cloud = document.createElement('div');
+      cloud.className = 'cloud';
+      
+      const size = Math.random() * 70 + 30;
+      const left = Math.random() * window.innerWidth;
+      
+      cloud.style.width = `${size}px`;
+      cloud.style.height = `${size / 2}px`;
+      cloud.style.left = `${left}px`;
+      cloud.style.top = `${window.innerHeight}px`;
+      cloud.style.opacity = Math.random() * 0.3 + 0.1;
+      
+      gameContainer.appendChild(cloud);
+      clouds.push({
+        element: cloud,
+        speed: Math.random() * 1 + 1
+      });
+    }
+    
+    // Random color generator for obstacles
+    function getRandomColor() {
+      const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+    
+    // Make player temporarily invincible (visual effect)
+    function makeInvincible(duration) {
+      isInvincible = true;
+      player.querySelector('path').setAttribute('fill', '#f1c40f');
+      
+      setTimeout(() => {
+        isInvincible = false;
+        player.querySelector('path').setAttribute('fill', '#f1c40f');
+      }, duration);
+    }
+    
+    // Shrink player (visual effect)
+    function shrinkPlayer() {
+      playerSize = Math.max(15, playerSize - 3);
+      player.style.width = `${playerSize}px`;
+      player.style.height = `${playerSize}px`;
+    }
+    
+    // Check for collisions
+    function checkCollision() {
+      if (isInvincible) return;
+      
+      const playerLeft = playerX - playerSize / 2;
+      const playerRight = playerX + playerSize / 2;
+      const playerTop = playerY - playerSize / 2; // Updated to use playerY
+      const playerBottom = playerTop + playerSize;
+      
+      // Adjust the hitbox to be slightly smaller than the visual size for more forgiving gameplay
+      const hitboxReduction = playerSize * 0.15;
+      const hitboxLeft = playerLeft + hitboxReduction;
+      const hitboxRight = playerRight - hitboxReduction;
+      const hitboxTop = playerTop + hitboxReduction;
+      const hitboxBottom = playerBottom - hitboxReduction;
+      
+      // Check standard obstacles
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        
+        // Check if player collides with obstacle
+        if (hitboxRight > obs.left && 
+            hitboxLeft < obs.right && 
+            hitboxBottom > obs.top && 
+            hitboxTop < obs.bottom) {
+          gameOver();
+          return;
+        }
+        
+        // Increase score when passing an obstacle
+        if (!obs.counted && obs.bottom < playerTop) {
+          score += 10;
+          scoreDisplay.textContent = `Score: ${score}`;
+          obs.counted = true;
+        }
+      }
+      
+      // Check moving obstacles
+      for (let i = 0; i < movingObstacles.length; i++) {
+        const obs = movingObstacles[i];
+        const obsLeft = parseFloat(obs.element.style.left);
+        const obsRight = obsLeft + obs.width;
+        
+        // Check if player collides with moving obstacle
+        if (hitboxRight > obsLeft && 
+            hitboxLeft < obsRight && 
+            hitboxBottom > obs.top && 
+            hitboxTop < obs.bottom) {
+          gameOver();
+          return;
+        }
+        
+        // Increase score when passing a moving obstacle
+        if (!obs.counted && obs.bottom < playerTop) {
+          score += 15; // More points for avoiding moving obstacles
+          scoreDisplay.textContent = `Score: ${score}`;
+          obs.counted = true;
+        }
+      }
+    }
+    
+    // Update level based on score
+    function updateLevel() {
+      const newLevel = Math.floor(score / 200) + 1;
+      if (newLevel > level) {
+        level = newLevel;
+        levelDisplay.textContent = `Level: ${level}`;
+        
+        // Increase game difficulty
+        gameSpeed += 0.5;
+        obstacleInterval = Math.max(300, obstacleInterval - 50);
+        
+        // Create fireworks instead of level up notification
+        createFireworks();
+        
+        // Make player smaller at higher levels
+        if (level > 3 && level % 2 === 0) {
+          shrinkPlayer();
+        }
+      }
+    }
+    
+    // Game loop
+    function gameLoop(timestamp) {
+      if (!gameRunning) return;
+      
+      // Create stardust trail
+      createStardust(timestamp);
+      
+      // Create new obstacles based on interval
+      if (!lastObstacleTime || timestamp - lastObstacleTime > obstacleInterval) {
+        createObstacle();
+        
+        // Create moving obstacles at higher levels
+        if (level >= 3 && Math.random() < 0.3 + (level * 0.05)) {
+          createMovingObstacle();
+        }
+        
+        lastObstacleTime = timestamp;
+        
+        // Create clouds occasionally
+        if (Math.random() < 0.2) {
+          createCloud();
+        }
+      }
+      
+      // Move obstacles
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.top -= gameSpeed;
+        obs.bottom -= gameSpeed;
+        obs.element.style.top = `${obs.top}px`;
+        
+        // Remove obstacles that have gone off screen
+        if (obs.bottom < 0) {
+          gameContainer.removeChild(obs.element);
+          obstacles.splice(i, 1);
+        }
+      }
+      
+      // Move and update moving obstacles
+      for (let i = movingObstacles.length - 1; i >= 0; i--) {
+        const obs = movingObstacles[i];
+        obs.top -= gameSpeed;
+        obs.bottom -= gameSpeed;
+        
+        // Horizontal movement
+        let currentLeft = parseFloat(obs.element.style.left);
+        currentLeft += obs.direction * obs.speed;
+        
+        // Bounce off edges
+        if (currentLeft <= 0 || currentLeft + obs.width >= window.innerWidth) {
+          obs.direction *= -1;
+        }
+        
+        obs.element.style.top = `${obs.top}px`;
+        obs.element.style.left = `${currentLeft}px`;
+        
+        // Remove obstacles that have gone off screen
+        if (obs.bottom < 0) {
+          gameContainer.removeChild(obs.element);
+          movingObstacles.splice(i, 1);
+        }
+      }
+      
+      // Update stardust particles
+      for (let i = stardust.length - 1; i >= 0; i--) {
+        const dust = stardust[i];
+        
+        // Move the stardust
+        const currentTop = parseFloat(dust.element.style.top);
+        const currentLeft = parseFloat(dust.element.style.left);
+        
+        dust.element.style.top = `${currentTop + dust.speedY}px`;
+        dust.element.style.left = `${currentLeft + dust.speedX}px`;
+        
+        // Fade out the stardust
+        dust.opacity -= 0.02;
+        dust.element.style.opacity = dust.opacity;
+        
+        // Slightly shrink the stardust
+        dust.size -= 0.05;
+        dust.element.style.width = `${Math.max(0.5, dust.size)}px`;
+        dust.element.style.height = `${Math.max(0.5, dust.size)}px`;
+        
+        // Remove stardust that has faded completely
+        if (dust.opacity <= 0) {
+          gameContainer.removeChild(dust.element);
+          stardust.splice(i, 1);
+        }
+      }
+      
+      // Update firework particles
+      for (let i = fireworks.length - 1; i >= 0; i--) {
+        const fw = fireworks[i];
+        
+        // Apply physics
+        fw.speedY += fw.gravity;
+        fw.x += fw.speedX;
+        fw.y += fw.speedY;
+        
+        // Update position
+        fw.element.style.left = `${fw.x}px`;
+        fw.element.style.top = `${fw.y}px`;
+        
+        // Fade out
+        fw.opacity -= 0.02;
+        fw.element.style.opacity = fw.opacity;
+        
+        // Remove when faded or off-screen
+        if (fw.opacity <= 0 || fw.y > window.innerHeight || 
+            fw.x < 0 || fw.x > window.innerWidth) {
+          gameContainer.removeChild(fw.element);
+          fireworks.splice(i, 1);
+        }
+      }
+      
+      // Make the star twinkle and rotate slightly for effect
+      const currentRotation = player.style.transform || 'translate(-50%, -50%) rotate(0deg)';
+      const currentRotationValue = currentRotation.match(/rotate\(([-\d]+)deg\)/) ? 
+        parseInt(currentRotation.match(/rotate\(([-\d]+)deg\)/)[1]) : 0;
+      const newRotation = (currentRotationValue + 0.5) % 360;
+      player.style.transform = `translate(-50%, -50%) rotate(${newRotation}deg)`;
+      
+      // Move clouds
+      for (let i = clouds.length - 1; i >= 0; i--) {
+        const cloud = clouds[i];
+        const top = parseInt(cloud.element.style.top);
+        cloud.element.style.top = `${top - cloud.speed}px`;
+        
+        // Remove clouds that have gone off screen
+        if (top + parseInt(cloud.element.style.height) < 0) {
+          gameContainer.removeChild(cloud.element);
+          clouds.splice(i, 1);
+        }
+      }
+      
+      // Check for collisions
+      checkCollision();
+      
+      // Increment score
+      if (gameRunning) {
+        score++;
+        if (score % 10 === 0) {
+          scoreDisplay.textContent = `Score: ${score}`;
+          updateLevel();
+        }
+      }
+      
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Game over function
+    function gameOver() {
+      gameRunning = false;
+      finalScoreDisplay.textContent = `Your score: ${score}`;
+      finalLevelDisplay.textContent = `Level reached: ${level}`;
+      gameOverScreen.style.display = 'block';
+    }
+    
+    // Restart game
+    restartBtn.addEventListener('click', function() {
+      // Clear obstacles
+      obstacles.forEach(obs => {
+        gameContainer.removeChild(obs.element);
+      });
+      obstacles = [];
+      
+      // Clear moving obstacles
+      movingObstacles.forEach(obs => {
+        gameContainer.removeChild(obs.element);
+      });
+      movingObstacles = [];
+      
+      // Clear clouds
+      clouds.forEach(cloud => {
+        gameContainer.removeChild(cloud.element);
+      });
+      clouds = [];
+      
+      // Clear stars
+      stars.forEach(star => {
+        gameContainer.removeChild(star);
+      });
+      stars = [];
+      
+      // Clear stardust
+      stardust.forEach(dust => {
+        gameContainer.removeChild(dust.element);
+      });
+      stardust = [];
+      
+      // Clear fireworks
+      fireworks.forEach(fw => {
+        gameContainer.removeChild(fw.element);
+      });
+      fireworks = [];
+      
+      // Reset variables
+      playerX = window.innerWidth / 2;
+      playerY = window.innerHeight / 2; // Reset playerY to center
+      player.style.left = `${playerX}px`;
+      player.style.top = `${playerY}px`; // Set top position
+      player.style.transform = 'translate(-50%, -50%) rotate(0deg)';
+      playerSize = 30;
+      player.style.width = `${playerSize}px`;
+      player.style.height = `${playerSize}px`;
+      score = 0;
+      level = 1;
+      gameSpeed = 4;
+      obstacleInterval = 1200;
+      lastObstacleTime = 0;
+      lastStardustTime = 0;
+      isInvincible = false;
+      
+      // Update display
+      scoreDisplay.textContent = `Score: 0`;
+      levelDisplay.textContent = `Level: 1`;
+      gameOverScreen.style.display = 'none';
+      
+      // Create stars
+      createStars();
+      
+      // Restart game
+      gameRunning = true;
+      requestAnimationFrame(gameLoop);
+    });
+    
+    // Create initial stars
+    createStars();
+    
+    // Start game
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
